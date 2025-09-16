@@ -33,10 +33,10 @@ android {
     }
 }
 
-tasks.withType(JavaCompile) {
-	compileTask -> compileTask.dependsOn ndkBuild
-}
-
+//tasks.withType(JavaCompile) {
+//	compileTask -> compileTask.dependsOn ndkBuild
+//}
+//
 //String getNdkBuildPath() {
 //	def ndkBuildingDir = System.getenv("NDK_HOME")
 //	if (ndkBuildingDir==null || ndkBuildingDir.isEmpty()) {
