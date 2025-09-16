@@ -33,40 +33,61 @@ android {
     }
 }
 
-//tasks.withType(JavaCompile) {
-//	compileTask -> compileTask.dependsOn ndkBuild
-//}
-//
-//String getNdkBuildPath() {
-//	def ndkBuildingDir = System.getenv("NDK_HOME")
-//	if (ndkBuildingDir==null || ndkBuildingDir.isEmpty()) {
-//		Properties properties = new Properties()
-//		properties.load(project.rootProject.file('local.properties').newDataInputStream())
-//		ndkBuildingDir = properties.getProperty("ndk.dir")
-//	}
-//	def ndkBuildPath = ndkBuildingDir
-//	if (Os.isFamily(Os.FAMILY_WINDOWS)) {
-//		ndkBuildPath = ndkBuildingDir + '/ndk-build.cmd'
-//	} else {
-//		ndkBuildPath = ndkBuildingDir + '/ndk-build'
-//	}
-//	return ndkBuildPath
-//}
-//
-//task ndkBuild(type: Exec, description: 'Compile JNI source via NDK') {
-//	println('executing ndkBuild')
-//	def ndkBuildPath = getNdkBuildPath();
-//	commandLine ndkBuildPath, '-j8', '-C', file('src/main').absolutePath
-//}
-//
-//task ndkClean(type: Exec, description: 'clean JNI libraries') {
-//	println('executing ndkBuild clean')
-//	def ndkBuildPath = getNdkBuildPath();
-//	commandLine ndkBuildPath, 'clean', '-C', file('src/main').absolutePath
-//}
-//
-//clean.dependsOn 'ndkClean'
-clean
+String getNdkBuildCmd() {
+	def ndkHome = System.getenv("NDK_HOME")
+	if (!ndkHome) ndkHome = System.getenv("ANDROID_NDK_HOME")
+
+	if (!ndkHome) {
+		// local.properties (로컬용) — JitPack에는 보통 없음
+		def lp = project.rootProject.file('local.properties')
+		if (lp.exists()) {
+			def p = new Properties()
+			p.load(lp.newDataInputStream())
+			ndkHome = p.getProperty('ndk.dir')
+		}
+	}
+	if (!ndkHome) {
+		// CI용: ANDROID_SDK_ROOT 또는 ANDROID_HOME 하위 ndk/<버전> 자동탐색
+		def sdk = System.getenv("ANDROID_SDK_ROOT") ?: System.getenv("ANDROID_HOME")
+		if (sdk) {
+			def ndkDir = new File(sdk, 'ndk')
+			if (ndkDir.exists()) {
+				// 가장 최신 버전 폴더를 사용
+				def versions = ndkDir.listFiles()?.findAll { it.isDirectory() }?.sort { a, b -> b.name <=> a.name }
+				if (versions && !versions.isEmpty()) {
+					ndkHome = versions[0].absolutePath
+				}
+			}
+			if (!ndkHome) {
+				def legacy = new File(sdk, 'ndk-bundle')
+				if (legacy.exists()) ndkHome = legacy.absolutePath
+			}
+		}
+	}
+	// 마지막 fallback: PATH 에 있는 ndk-build 사용
+	if (!ndkHome) {
+		return Os.isFamily(Os.FAMILY_WINDOWS) ? 'ndk-build.cmd' : 'ndk-build'
+	}
+	return Os.isFamily(Os.FAMILY_WINDOWS) ? "${ndkHome}/ndk-build.cmd" : "${ndkHome}/ndk-build"
+}
+
+task ndkBuild(type: Exec, description: 'Compile JNI source via NDK') {
+	def cmd = getNdkBuildCmd()
+	println("executing ndkBuild -> ${cmd}")
+	commandLine cmd, '-j8', '-C', file('src/main').absolutePath
+}
+
+task ndkClean(type: Exec, description: 'clean JNI libraries') {
+	def cmd = getNdkBuildCmd()
+	println('executing ndkBuild clean -> ' + cmd)
+	commandLine cmd, 'clean', '-C', file('src/main').absolutePath
+}
+
+tasks.withType(JavaCompile) { compileTask ->
+	compileTask.dependsOn ndkBuild
+}
+
+clean.dependsOn 'ndkClean'
 
 dependencies {
     implementation fileTree(dir: new File(buildDir, 'libs'), include: '*.jar')
