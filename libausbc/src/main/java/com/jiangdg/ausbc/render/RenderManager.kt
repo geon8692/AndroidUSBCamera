@@ -19,6 +19,7 @@ import android.content.ContentValues
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.SurfaceTexture
+import android.media.MediaScannerConnection
 import android.opengl.EGLContext
 import android.os.*
 import android.provider.MediaStore
@@ -465,16 +466,9 @@ class RenderManager(
             mCaptureState.set(false)
             return
         }
-        val values = ContentValues()
-        values.put(MediaStore.Images.ImageColumns.TITLE, title)
-        values.put(MediaStore.Images.ImageColumns.DISPLAY_NAME, displayName)
-        values.put(MediaStore.Images.ImageColumns.DATA, path)
-        values.put(MediaStore.Images.ImageColumns.DATE_TAKEN, date)
-        values.put(MediaStore.Images.ImageColumns.WIDTH, width)
-        values.put(MediaStore.Images.ImageColumns.HEIGHT, height)
-        mContext.contentResolver?.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
-        mMainHandler.post {
-            mCaptureDataCb?.onComplete(path)
+        MediaScannerConnection.scanFile(mContext, arrayOf(path), arrayOf("image/jpeg")) { _, uri ->
+            Logger.i(TAG, "scanned: $uri")
+            mMainHandler.post { mCaptureDataCb?.onComplete(path) }
         }
         mCaptureState.set(false)
         if (Utils.debugCamera) {
